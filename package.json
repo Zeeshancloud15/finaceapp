@@ -1,0 +1,14 @@
+{
+  "name": "finaceapp",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "node tests/health.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
+  }
+}
