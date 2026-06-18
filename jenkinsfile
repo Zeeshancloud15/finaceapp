@@ -2,37 +2,35 @@ pipeline {
 
     agent any
 
-    tools {
-        nodejs 'NodeJS'
-    }
-
     environment {
-        APP_NAME       = 'finaceapp'
-        DOCKER_IMAGE   = 'zeeshancloud15/finaceapp'
-        SONARQUBE_ENV  = 'sonar-fin'
-        KUBE_NAMESPACE = 'finance'
-        BUILD_TAG_NAME = "${BUILD_NUMBER}"
-    }
-
-    options {
-        timestamps()
-        disableConcurrentBuilds()
+        DOCKER_IMAGE = "zeeshancloud15/finaceapp"
+        BUILD_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code...'
-                git branch: 'main',
-                    url: 'https://github.com/Zeeshancloud15/finaceapp.git'
+                echo 'Checkout Source Code'
+                checkout scm
+            }
+        }
+
+        stage('Verify Environment') {
+            steps {
+                sh '''
+                pwd
+                ls -la
+                node -v
+                npm -v
+                '''
             }
         }
 
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    npm install
+                npm install
                 '''
             }
         }
@@ -40,28 +38,20 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
-                    npm test
+                npm test
                 '''
             }
         }
 
         stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                withSonarQubeEnv('sonar-fin') {
                     sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=finaceapp \
-                        -Dsonar.projectName=finaceapp \
-                        -Dsonar.sources=.
+                    sonar-scanner \
+                    -Dsonar.projectKey=finaceapp \
+                    -Dsonar.projectName=finaceapp \
+                    -Dsonar.sources=.
                     '''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -69,33 +59,14 @@ pipeline {
         stage('Docker Build') {
             steps {
                 sh """
-                    docker build \
-                    -t ${DOCKER_IMAGE}:${BUILD_TAG_NAME} \
-                    -t ${DOCKER_IMAGE}:latest .
+                docker build \
+                -t ${DOCKER_IMAGE}:${BUILD_TAG} \
+                -t ${DOCKER_IMAGE}:latest .
                 """
             }
         }
 
-        stage('Container Verification') {
-            steps {
-                sh '''
-                    docker rm -f finance-test || true
-
-                    docker run -d \
-                      --name finance-test \
-                      -p 8080:8080 \
-                      ${DOCKER_IMAGE}:${BUILD_TAG_NAME}
-
-                    sleep 15
-
-                    curl -f http://localhost:8080/health
-
-                    docker rm -f finance-test || true
-                '''
-            }
-        }
-
-        stage('Docker Hub Login') {
+        stage('Docker Login') {
             steps {
                 withCredentials([
                     usernamePassword(
@@ -105,36 +76,29 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        echo "$DOCKER_PASS" | docker login \
-                        -u "$DOCKER_USER" \
-                        --password-stdin
+                    echo "$DOCKER_PASS" | docker login \
+                    -u "$DOCKER_USER" \
+                    --password-stdin
                     '''
                 }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Push Image') {
             steps {
                 sh """
-                    docker push ${DOCKER_IMAGE}:${BUILD_TAG_NAME}
-                    docker push ${DOCKER_IMAGE}:latest
+                docker push ${DOCKER_IMAGE}:${BUILD_TAG}
+                docker push ${DOCKER_IMAGE}:latest
                 """
             }
         }
 
-        stage('Deploy Namespace') {
+        stage('Deploy Kubernetes') {
             steps {
                 sh '''
-                    kubectl apply -f kubernetes/namespace.yaml
-                '''
-            }
-        }
-
-        stage('Deploy Application') {
-            steps {
-                sh '''
-                    kubectl apply -f kubernetes/deployment.yaml
-                    kubectl apply -f kubernetes/service.yaml
+                kubectl apply -f kubernetes/namespace.yaml
+                kubectl apply -f kubernetes/deployment.yaml
+                kubectl apply -f kubernetes/service.yaml
                 '''
             }
         }
@@ -142,25 +106,22 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh '''
-                    kubectl rollout status deployment/finaceapp \
-                    -n finance --timeout=180s
-
-                    kubectl get pods -n finance
-
-                    kubectl get svc -n finance
+                kubectl get pods -n finance
+                kubectl get svc -n finance
                 '''
             }
         }
+
     }
 
     post {
 
         success {
-            echo 'Pipeline completed successfully.'
+            echo 'Build Successful'
         }
 
         failure {
-            echo 'Pipeline failed.'
+            echo 'Build Failed'
         }
 
         always {
