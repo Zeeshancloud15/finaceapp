@@ -156,7 +156,7 @@ pipeline {
         stage('Verify Deployment') {
             steps {
 
-                sshagent(['k8s-master-key']) {
+                sshagent(['ssh-cred']) {
 
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} '
