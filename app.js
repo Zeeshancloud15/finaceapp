@@ -77,9 +77,7 @@ app.post('/login', async (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({
-        status: 'UP'
-    });
+    res.json({ status: 'UP' });
 });
 
 const PORT = process.env.PORT || 3000;
