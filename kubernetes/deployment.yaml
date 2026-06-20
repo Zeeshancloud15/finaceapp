@@ -1,31 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
-
 metadata:
-  name: finaceapp
-  namespace: finance
-
+  name: financeapp
+  namespace: financeapp
 spec:
-  replicas: 1
-
+  replicas: 2
   selector:
     matchLabels:
-      app: finaceapp
-
+      app: financeapp
   template:
     metadata:
       labels:
-        app: finaceapp
-
+        app: financeapp
     spec:
       containers:
-      - name: finaceapp
-
-        image: zeeshancloud15/finaceapp:latest
-
+      - name: financeapp
+        image: financeapp:latest
         ports:
-        - containerPort: 8080
-
-        env:
-        - name: AWS_REGION
-          value: ap-south-1
+        - containerPort: 3000
