@@ -1,38 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance App - Home</title>
-</head>
-<body>
-    <header>
-        <h1>Finance App</h1>
-        <nav>
-            <a href="/">Home</a>
-            <a href="/store">Store</a>
-            <a href="/support">Support</a>
-            <a href="/login">Login</a>
-        </nav>
-    </header>
+<h2>Register</h2>
 
-    <main>
-        <h2>Welcome to Finance App</h2>
-        <p>Manage your finances, track expenses, and monitor savings.</p>
+<form action="/register" method="POST">
 
-        <section>
-            <h3>Features</h3>
-            <ul>
-                <li>Expense Tracking</li>
-                <li>Budget Planning</li>
-                <li>Savings Goals</li>
-                <li>Financial Reports</li>
-            </ul>
-        </section>
-    </main>
+    <input type="text"
+           name="name"
+           placeholder="Name"
+           required>
 
-    <footer>
-        <p>&copy; 2026 Finance App</p>
-    </footer>
-</body>
-</html>
+    <br><br>
+
+    <input type="email"
+           name="email"
+           placeholder="Email"
+           required>
+
+    <br><br>
+
+    <input type="text"
+           name="phone"
+           placeholder="Phone"
+           required>
+
+    <br><br>
+
+    <button type="submit">
+        Register
+    </button>
+
+</form>
