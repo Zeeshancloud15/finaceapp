@@ -48,6 +48,34 @@ app.post('/register', async (req, res) => {
     }
 });
 
+app.post('/login', async (req, res) => {
+
+    const { email } = req.body;
+
+    const params = {
+        TableName: 'financetb',
+        FilterExpression: 'email = :e',
+        ExpressionAttributeValues: {
+            ':e': email
+        }
+    };
+
+    try {
+
+        const result = await dynamodb.scan(params).promise();
+
+        if (result.Items.length > 0) {
+            res.send('Login Successful');
+        } else {
+            res.send('User Not Found');
+        }
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Database Error');
+    }
+});
+
 app.get('/health', (req, res) => {
     res.json({
         status: 'UP'
