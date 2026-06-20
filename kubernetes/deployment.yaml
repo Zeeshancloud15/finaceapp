@@ -15,6 +15,7 @@ spec:
     spec:
       containers:
       - name: financeapp
-        image: financeapp:latest
+        image: zeeshancloud15/finaceapp:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
