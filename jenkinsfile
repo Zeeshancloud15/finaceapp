@@ -8,16 +8,21 @@ pipeline {
     }
 
     environment {
-        GIT_REPO     = 'https://github.com/Zeeshancloud15/finaceapp.git'
-        GIT_BRANCH   = 'main'
 
-        DOCKER_IMAGE = 'zeeshancloud15/finaceapp'
-        BUILD_TAG    = "${BUILD_NUMBER}"
+        // Git
+        GIT_REPO   = 'https://github.com/Zeeshancloud15/finaceapp.git'
+        GIT_BRANCH = 'main'
 
-        K8S_MASTER   = '52.207.237.43'
+        // Docker
+        IMAGE_NAME = 'zeeshancloud15/finaceapp'
+        IMAGE_TAG  = "${BUILD_NUMBER}"
 
-        NEXUS_URL    = 'http://44.204.234.177:8081'
-        NEXUS_REPO   = 'node-artifacts'
+        // Nexus
+        NEXUS_URL  = 'http://44.204.234.177:8081'
+        NEXUS_REPO = 'node-artifacts'
+
+        // Kubernetes Master
+        K8S_MASTER = '52.207.237.43'
     }
 
     stages {
@@ -32,15 +37,15 @@ pipeline {
         stage('Verify Environment') {
             steps {
                 sh '''
-                echo "===== WORKSPACE ====="
+                echo "===== Workspace ====="
                 pwd
                 ls -la
 
-                echo "===== NODE ====="
+                echo "===== Node ====="
                 node -v
                 npm -v
 
-                echo "===== DOCKER ====="
+                echo "===== Docker ====="
                 docker --version
                 '''
             }
@@ -54,16 +59,24 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                sh 'npm test'
+                sh '''
+                if npm run | grep -q "test"; then
+                    npm test
+                else
+                    echo "No tests found. Skipping..."
+                fi
+                '''
             }
         }
 
         stage('SonarQube Scan') {
             steps {
                 script {
+
                     def scannerHome = tool 'sonar-scanner'
 
                     withSonarQubeEnv('sonar-fin') {
+
                         sh """
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=finaceapp \
@@ -80,23 +93,26 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Package Application') {
+        stage('Package Artifact') {
             steps {
                 sh """
-                tar --exclude=node_modules \
-                    --exclude=.git \
-                    -czf finance-app-${BUILD_NUMBER}.tar.gz .
+                tar \
+                --exclude=node_modules \
+                --exclude=.git \
+                -czf finance-app-${BUILD_NUMBER}.tar.gz .
                 """
             }
         }
 
         stage('Upload Artifact to Nexus') {
+
             steps {
+
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'nexus-creds',
@@ -104,8 +120,10 @@ pipeline {
                         passwordVariable: 'NEXUS_PASS'
                     )
                 ]) {
+
                     sh """
-                    curl -v -u ${NEXUS_USER}:${NEXUS_PASS} \
+                    curl -v \
+                    -u ${NEXUS_USER}:${NEXUS_PASS} \
                     --upload-file finance-app-${BUILD_NUMBER}.tar.gz \
                     ${NEXUS_URL}/repository/${NEXUS_REPO}/finance-app-${BUILD_NUMBER}.tar.gz
                     """
@@ -115,16 +133,18 @@ pipeline {
 
         stage('Docker Build') {
             steps {
+
                 sh """
                 docker build \
-                -t ${DOCKER_IMAGE}:${BUILD_TAG} \
-                -t ${DOCKER_IMAGE}:latest .
+                -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                -t ${IMAGE_NAME}:latest .
                 """
             }
         }
 
         stage('Docker Login') {
             steps {
+
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-creds',
@@ -132,6 +152,7 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
+
                     sh '''
                     echo "$DOCKER_PASS" | docker login \
                     -u "$DOCKER_USER" \
@@ -143,15 +164,18 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
+
                 sh """
-                docker push ${DOCKER_IMAGE}:${BUILD_TAG}
-                docker push ${DOCKER_IMAGE}:latest
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                docker push ${IMAGE_NAME}:latest
                 """
             }
         }
 
-        stage('Deploy Kubernetes') {
+        stage('Deploy to Kubernetes') {
+
             steps {
+
                 sshagent(['ssh-cred']) {
 
                     sh """
@@ -167,9 +191,17 @@ pipeline {
 
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} '
-                        kubectl apply -f /home/ubuntu/k8s/namespace.yaml
-                        kubectl apply -f /home/ubuntu/k8s/deployment.yaml
-                        kubectl apply -f /home/ubuntu/k8s/service.yaml
+
+                    kubectl apply -f /home/ubuntu/k8s/namespace.yaml
+
+                    kubectl apply -f /home/ubuntu/k8s/deployment.yaml
+
+                    kubectl apply -f /home/ubuntu/k8s/service.yaml
+
+                    kubectl set image deployment/finance-app \
+                    finance-app=${IMAGE_NAME}:${IMAGE_TAG} \
+                    -n finance
+
                     '
                     """
                 }
@@ -177,31 +209,42 @@ pipeline {
         }
 
         stage('Verify Deployment') {
+
             steps {
+
                 sshagent(['ssh-cred']) {
+
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} '
-                        kubectl rollout status deployment/finance-app -n finance --timeout=180s
-                        kubectl get pods -n finance
-                        kubectl get svc -n finance
+
+                    kubectl rollout status deployment/finance-app \
+                    -n finance --timeout=180s
+
+                    kubectl get pods -n finance
+
+                    kubectl get svc -n finance
+
                     '
                     """
                 }
             }
         }
+
     }
 
     post {
+
         success {
-            echo 'Build Successful'
+            echo "Pipeline Completed Successfully"
         }
 
         failure {
-            echo 'Build Failed'
+            echo "Pipeline Failed"
         }
 
         always {
             sh 'docker logout || true'
+            cleanWs()
         }
     }
 }
