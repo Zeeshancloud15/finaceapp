@@ -13,7 +13,7 @@ pipeline {
         GIT_REPO   = 'https://github.com/Zeeshancloud15/finaceapp.git'
         GIT_BRANCH = 'main'
 
-        // Docker
+        // Docker Hub
         IMAGE_NAME = 'zeeshancloud15/finaceapp'
         IMAGE_TAG  = "${BUILD_NUMBER}"
 
@@ -21,7 +21,7 @@ pipeline {
         NEXUS_URL  = 'http://44.204.234.177:8081'
         NEXUS_REPO = 'node-artifacts'
 
-        // Kubernetes Master
+        // Kubernetes
         K8S_MASTER = '52.207.237.43'
     }
 
@@ -59,13 +59,7 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                sh '''
-                if npm run | grep -q "test"; then
-                    npm test
-                else
-                    echo "No tests found. Skipping..."
-                fi
-                '''
+                sh 'npm test'
             }
         }
 
@@ -102,15 +96,17 @@ pipeline {
             steps {
                 sh """
                 tar \
+                --warning=no-file-changed \
                 --exclude=node_modules \
                 --exclude=.git \
-                -czf finance-app-${BUILD_NUMBER}.tar.gz .
+                -czf /tmp/finance-app-${BUILD_NUMBER}.tar.gz .
+
+                mv /tmp/finance-app-${BUILD_NUMBER}.tar.gz .
                 """
             }
         }
 
         stage('Upload Artifact to Nexus') {
-
             steps {
 
                 withCredentials([
@@ -133,7 +129,6 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-
                 sh """
                 docker build \
                 -t ${IMAGE_NAME}:${IMAGE_TAG} \
@@ -164,7 +159,6 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-
                 sh """
                 docker push ${IMAGE_NAME}:${IMAGE_TAG}
                 docker push ${IMAGE_NAME}:latest
@@ -172,64 +166,40 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
-
+        stage('Deploy Kubernetes') {
             steps {
 
                 sshagent(['ssh-cred']) {
 
                     sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} \
-                    'mkdir -p /home/ubuntu/k8s'
+                    ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} 'mkdir -p /home/ubuntu/k8s'
                     """
 
                     sh """
-                    scp -o StrictHostKeyChecking=no \
-                    kubernetes/*.yaml \
+                    scp -o StrictHostKeyChecking=no kubernetes/*.yaml \
                     ubuntu@${K8S_MASTER}:/home/ubuntu/k8s/
                     """
 
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} '
+                        kubectl apply -f /home/ubuntu/k8s/namespace.yaml
+                        kubectl apply -f /home/ubuntu/k8s/deployment.yaml
+                        kubectl apply -f /home/ubuntu/k8s/service.yaml
 
-                    kubectl apply -f /home/ubuntu/k8s/namespace.yaml
+                        kubectl set image deployment/finance-app \
+                        finance-app=${IMAGE_NAME}:${IMAGE_TAG} \
+                        -n finance
 
-                    kubectl apply -f /home/ubuntu/k8s/deployment.yaml
+                        kubectl rollout status deployment/finance-app \
+                        -n finance --timeout=180s
 
-                    kubectl apply -f /home/ubuntu/k8s/service.yaml
-
-                    kubectl set image deployment/finance-app \
-                    finance-app=${IMAGE_NAME}:${IMAGE_TAG} \
-                    -n finance
-
+                        kubectl get pods -n finance
+                        kubectl get svc -n finance
                     '
                     """
                 }
             }
         }
-
-        stage('Verify Deployment') {
-
-            steps {
-
-                sshagent(['ssh-cred']) {
-
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@${K8S_MASTER} '
-
-                    kubectl rollout status deployment/finance-app \
-                    -n finance --timeout=180s
-
-                    kubectl get pods -n finance
-
-                    kubectl get svc -n finance
-
-                    '
-                    """
-                }
-            }
-        }
-
     }
 
     post {
